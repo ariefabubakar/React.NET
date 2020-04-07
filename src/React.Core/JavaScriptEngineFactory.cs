@@ -84,8 +84,11 @@ namespace React
 		protected virtual IJsPool CreatePool()
 		{
 			var allFiles = _config.Scripts
-				.Concat(_config.ScriptsWithoutTransform)
-				.Select(_fileSystem.MapPath);
+					.Concat(_config.ScriptsWithoutTransform)
+					.Concat(_config.ReactAppBuildPath != null
+						? new[] { $"{_config.ReactAppBuildPath}/asset-manifest.json"}
+						: Enumerable.Empty<string>())
+					.Select(_fileSystem.MapPath);
 
 			var poolConfig = new JsPoolConfig
 			{
@@ -139,7 +142,7 @@ namespace React
 			LoadUserScripts(engine);
 			if (!_config.LoadReact && _scriptLoadException == null)
 			{
-				// We expect to user to have loaded their own version of React in the scripts that
+				// We expect the user to have loaded their own version of React in the scripts that
 				// were loaded above, let's ensure that's the case.
 				EnsureReactLoaded(engine);
 			}
@@ -171,38 +174,47 @@ namespace React
 		/// <param name="engine">Engine to load scripts into</param>
 		private void LoadUserScripts(IJsEngine engine)
 		{
-			foreach (var file in _config.ScriptsWithoutTransform)
+			try
 			{
-				try
+				IEnumerable<string> manifestFiles = Enumerable.Empty<string>();
+				if (_config.ReactAppBuildPath != null)
 				{
-					if (_config.AllowJavaScriptPrecompilation
-						&& engine.TryExecuteFileWithPrecompilation(_cache, _fileSystem, file))
+					var manifest = ReactAppAssetManifest.LoadManifest(_config, _fileSystem, _cache, useCacheRead: false);
+					manifestFiles = (manifest?.Entrypoints?.Where(x => x != null && x.EndsWith(".js"))) ?? Enumerable.Empty<string>();
+				}
+
+				foreach (var file in _config.ScriptsWithoutTransform.Concat(manifestFiles))
+				{
+					try
 					{
-						// Do nothing.
+						if (_config.AllowJavaScriptPrecompilation
+							&& engine.TryExecuteFileWithPrecompilation(_cache, _fileSystem, file))
+						{
+							// Do nothing.
+						}
+						else
+						{
+							engine.ExecuteFile(_fileSystem, file);
+						}
 					}
-					else
+					catch (JsException ex)
 					{
-						engine.ExecuteFile(_fileSystem, file);
+						// We can't simply rethrow the exception here, as it's possible this is running
+						// on a background thread (ie. as a response to a file changing). If we did
+						// throw the exception here, it would terminate the entire process. Instead,
+						// save the exception, and then just rethrow it later when getting the engine.
+						_scriptLoadException = new ReactScriptLoadException(string.Format(
+							"Error while loading \"{0}\": {1}",
+							file,
+							ex.Message
+						), ex);
 					}
 				}
-				catch (JsScriptException ex)
-				{
-					// We can't simply rethrow the exception here, as it's possible this is running
-					// on a background thread (ie. as a response to a file changing). If we did
-					// throw the exception here, it would terminate the entire process. Instead,
-					// save the exception, and then just rethrow it later when getting the engine.
-					_scriptLoadException = new ReactScriptLoadException(string.Format(
-						"Error while loading \"{0}\": {1}\r\nLine: {2}\r\nColumn: {3}",
-						file,
-						ex.Message,
-						ex.LineNumber,
-						ex.ColumnNumber
-					));
-				}
-				catch (IOException ex)
-				{
-					_scriptLoadException = new ReactScriptLoadException(ex.Message);
-				}
+			}
+			catch (IOException ex)
+			{
+				// Files could be in the process of being rebuilt by JS build tooling
+				_scriptLoadException = new ReactScriptLoadException(ex.Message, ex);;
 			}
 		}
 
@@ -210,14 +222,14 @@ namespace React
 		/// Ensures that React has been correctly loaded into the specified engine.
 		/// </summary>
 		/// <param name="engine">Engine to check</param>
-		private static void EnsureReactLoaded(IJsEngine engine)
+		private void EnsureReactLoaded(IJsEngine engine)
 		{
 			var globalsString = engine.CallFunction<string>("ReactNET_initReact");
 			string[] globals = globalsString.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
 
 			if (globals.Length != 0)
 			{
-				throw new ReactNotInitialisedException(
+				_scriptLoadException = new ReactNotInitialisedException(
 					$"React has not been loaded correctly: missing ({string.Join(", ", globals)})." +
 					"Please expose your version of React as global variables named " +
 					"'React', 'ReactDOM', and 'ReactDOMServer', or enable the 'LoadReact'" +
@@ -291,13 +303,13 @@ namespace React
 				}
 			}
 
-			if (jsEngineSwitcher.EngineFactories.Count() == 0)
+			if (jsEngineSwitcher.EngineFactories.Count == 0)
 			{
 				throw new ReactException("No JS engines were registered. Visit https://reactjs.net/docs for more information.");
 			}
 
 			var exceptionMessages = new List<string>();
-			foreach (var engineFactory in jsEngineSwitcher.EngineFactories)
+			foreach (var engineFactory in jsEngineSwitcher.EngineFactories.GetRegisteredFactories())
 			{
 				IJsEngine engine = null;
 				try

@@ -7,12 +7,15 @@
 
 using System;
 using System.IO;
+using System.Linq;
+using System.Text;
 
 #if LEGACYASPNET
 using System.Web;
 using IHtmlHelper = System.Web.Mvc.HtmlHelper;
 #else
 using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.AspNetCore.Html;
 using IHtmlString = Microsoft.AspNetCore.Html.IHtmlContent;
 #endif
 
@@ -27,6 +30,9 @@ namespace React.AspNet
 	/// </summary>
 	public static class HtmlHelperExtensions
 	{
+		[ThreadStatic]
+		private static StringWriter _sharedStringWriter;
+
 		/// <summary>
 		/// Gets the React environment
 		/// </summary>
@@ -66,28 +72,25 @@ namespace React.AspNet
 			IRenderFunctions renderFunctions = null
 		)
 		{
-			return new ActionHtmlString(writer =>
+			try
 			{
-				try
+				var reactComponent = Environment.CreateComponent(componentName, props, containerId, clientOnly, serverOnly);
+				if (!string.IsNullOrEmpty(htmlTag))
 				{
-					var reactComponent = Environment.CreateComponent(componentName, props, containerId, clientOnly, serverOnly);
-					if (!string.IsNullOrEmpty(htmlTag))
-					{
-						reactComponent.ContainerTag = htmlTag;
-					}
-
-					if (!string.IsNullOrEmpty(containerClass))
-					{
-						reactComponent.ContainerClass = containerClass;
-					}
-
-					reactComponent.RenderHtml(writer, clientOnly, serverOnly, exceptionHandler, renderFunctions);
+					reactComponent.ContainerTag = htmlTag;
 				}
-				finally
+
+				if (!string.IsNullOrEmpty(containerClass))
 				{
-					Environment.ReturnEngineToPool();
+					reactComponent.ContainerClass = containerClass;
 				}
-			});
+
+				return RenderToString(writer => reactComponent.RenderHtml(writer, clientOnly, serverOnly, exceptionHandler, renderFunctions));
+			}
+			finally
+			{
+				Environment.ReturnEngineToPool();
+			}
 		}
 
 		/// <summary>
@@ -102,8 +105,10 @@ namespace React.AspNet
 		/// <param name="htmlTag">HTML tag to wrap the component in. Defaults to &lt;div&gt;</param>
 		/// <param name="containerId">ID to use for the container HTML tag. Defaults to an auto-generated ID</param>
 		/// <param name="clientOnly">Skip rendering server-side and only output client-side initialisation code. Defaults to <c>false</c></param>
+		/// <param name="serverOnly">Skip rendering React specific data-attributes, container and client-side initialisation during server side rendering. Defaults to <c>false</c></param>
 		/// <param name="containerClass">HTML class(es) to set on the container tag</param>
 		/// <param name="exceptionHandler">A custom exception handler that will be called if a component throws during a render. Args: (Exception ex, string componentName, string containerId)</param>
+		/// <param name="renderFunctions">Functions to call during component render</param>
 		/// <returns>The component's HTML</returns>
 		public static IHtmlString ReactWithInit<T>(
 			this IHtmlHelper htmlHelper,
@@ -112,35 +117,38 @@ namespace React.AspNet
 			string htmlTag = null,
 			string containerId = null,
 			bool clientOnly = false,
+			bool serverOnly = false,
 			string containerClass = null,
-			Action<Exception, string, string> exceptionHandler = null
+			Action<Exception, string, string> exceptionHandler = null,
+			IRenderFunctions renderFunctions = null
 		)
 		{
-			return new ActionHtmlString(writer =>
+			try
 			{
-				try
+				var reactComponent = Environment.CreateComponent(componentName, props, containerId, clientOnly);
+				if (!string.IsNullOrEmpty(htmlTag))
 				{
-					var reactComponent = Environment.CreateComponent(componentName, props, containerId, clientOnly);
-					if (!string.IsNullOrEmpty(htmlTag))
-					{
-						reactComponent.ContainerTag = htmlTag;
-					}
+					reactComponent.ContainerTag = htmlTag;
+				}
 
-					if (!string.IsNullOrEmpty(containerClass))
-					{
-						reactComponent.ContainerClass = containerClass;
-					}
+				if (!string.IsNullOrEmpty(containerClass))
+				{
+					reactComponent.ContainerClass = containerClass;
+				}
 
-					reactComponent.RenderHtml(writer, clientOnly, exceptionHandler: exceptionHandler);
+				return RenderToString(writer =>
+				{
+					reactComponent.RenderHtml(writer, clientOnly, serverOnly, exceptionHandler: exceptionHandler, renderFunctions);
 					writer.WriteLine();
-					WriteScriptTag(writer, bodyWriter => reactComponent.RenderJavaScript(bodyWriter));
-				}
-				finally
-				{
-					Environment.ReturnEngineToPool();
-				}
-			});
-		}
+					WriteScriptTag(writer, bodyWriter => reactComponent.RenderJavaScript(bodyWriter, waitForDOMContentLoad: true));
+				});
+
+			}
+			finally
+			{
+				Environment.ReturnEngineToPool();
+			}
+	}
 
 		/// <summary>
 		/// Renders the JavaScript required to initialise all components client-side. This will
@@ -149,17 +157,59 @@ namespace React.AspNet
 		/// <returns>JavaScript for all components</returns>
 		public static IHtmlString ReactInitJavaScript(this IHtmlHelper htmlHelper, bool clientOnly = false)
 		{
-			return new ActionHtmlString(writer =>
+			try
 			{
-				try
+				return RenderToString(writer =>
 				{
 					WriteScriptTag(writer, bodyWriter => Environment.GetInitJavaScript(bodyWriter, clientOnly));
-				}
-				finally
-				{
-					Environment.ReturnEngineToPool();
-				}
-			});
+				});
+			}
+			finally
+			{
+				Environment.ReturnEngineToPool();
+			}
+		}
+
+		/// <summary>
+		/// Returns script tags based on the webpack asset manifest
+		/// </summary>
+		/// <param name="htmlHelper"></param>
+		/// <returns></returns>
+		public static IHtmlString ReactGetScriptPaths(this IHtmlHelper htmlHelper)
+		{
+			string nonce = Environment.Configuration.ScriptNonceProvider != null
+				? $" nonce=\"{Environment.Configuration.ScriptNonceProvider()}\""
+				: "";
+
+			return new HtmlString(string.Join("", Environment.GetScriptPaths()
+				.Select(scriptPath => $"<script{nonce} src=\"{scriptPath}\"></script>")));
+		}
+
+		/// <summary>
+		/// Returns style tags based on the webpack asset manifest
+		/// </summary>
+		/// <param name="htmlHelper"></param>
+		/// <returns></returns>
+		public static IHtmlString ReactGetStylePaths(this IHtmlHelper htmlHelper)
+		{
+			return new HtmlString(string.Join("", Environment.GetStylePaths()
+				.Select(stylePath => $"<link rel=\"stylesheet\" href=\"{stylePath}\" />")));
+		}
+
+		private static IHtmlString RenderToString(Action<StringWriter> withWriter)
+		{
+			var stringWriter = _sharedStringWriter;
+			if (stringWriter != null)
+			{
+				stringWriter.GetStringBuilder().Clear();
+			}
+			else
+			{
+				_sharedStringWriter = stringWriter = new StringWriter(new StringBuilder(128));
+			}
+
+			withWriter(stringWriter);
+			return new HtmlString(stringWriter.ToString());
 		}
 
 		private static void WriteScriptTag(TextWriter writer, Action<TextWriter> bodyWriter)

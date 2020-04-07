@@ -5,12 +5,15 @@
  * LICENSE file in the root directory of this source tree.
  */
 #if NET452
+using React.Web.Mvc;
+#else
+using React.AspNet;
+#endif
 
 using System;
 using System.IO;
 using System.Security.Cryptography;
 using Moq;
-using React.Web.Mvc;
 using Xunit;
 
 namespace React.Tests.Mvc
@@ -38,7 +41,7 @@ namespace React.Tests.Mvc
 			component.Setup(x => x.RenderHtml(It.IsAny<TextWriter>(), false, false, null, null))
 				.Callback((TextWriter writer, bool renderContainerOnly, bool renderServerOnly, Action<Exception, string, string> exceptionHandler, IRenderFunctions renderFunctions) => writer.Write("HTML"));
 
-			component.Setup(x => x.RenderJavaScript(It.IsAny<TextWriter>())).Callback((TextWriter writer) => writer.Write("JS"));
+			component.Setup(x => x.RenderJavaScript(It.IsAny<TextWriter>(), It.IsAny<bool>())).Callback((TextWriter writer, bool waitForDOMContentLoad) => writer.Write(waitForDOMContentLoad ? "waiting for page load JS" : "JS"));
 
 			var environment = ConfigureMockEnvironment();
 			environment.Setup(x => x.CreateComponent(
@@ -57,8 +60,25 @@ namespace React.Tests.Mvc
 			).ToHtmlString();
 
 			Assert.Equal(
-				"HTML" + System.Environment.NewLine + "<script>JS</script>",
+				"HTML" + System.Environment.NewLine + "<script>waiting for page load JS</script>",
 				result.ToString()
+			);
+		}
+
+		[Fact]
+		public void GetInitJavaScriptReturns()
+		{
+			var component = new Mock<IReactComponent>();
+
+			var environment = ConfigureMockEnvironment();
+
+			environment.Setup(x => x.GetInitJavaScript(It.IsAny<TextWriter>(), It.IsAny<bool>())).Callback((TextWriter writer, bool clientOnly) => writer.Write("JS"));
+
+			var renderJSResult = HtmlHelperExtensions.ReactInitJavaScript(htmlHelper: null, clientOnly: false);
+
+			Assert.Equal(
+				"<script>JS</script>",
+				renderJSResult.ToString()
 			);
 		}
 
@@ -77,7 +97,7 @@ namespace React.Tests.Mvc
 			component.Setup(x => x.RenderHtml(It.IsAny<TextWriter>(), false, false, null, null))
 				.Callback((TextWriter writer, bool renderContainerOnly, bool renderServerOnly, Action<Exception, string, string> exceptionHandle, IRenderFunctions renderFunctions) => writer.Write("HTML")).Verifiable();
 
-			component.Setup(x => x.RenderJavaScript(It.IsAny<TextWriter>())).Callback((TextWriter writer) => writer.Write("JS")).Verifiable();
+			component.Setup(x => x.RenderJavaScript(It.IsAny<TextWriter>(), It.IsAny<bool>())).Callback((TextWriter writer, bool waitForDOMContentLoad) => writer.Write(waitForDOMContentLoad ? "waiting for page load JS" : "JS")).Verifiable();
 
 			var config = new Mock<IReactSiteConfiguration>();
 
@@ -101,7 +121,7 @@ namespace React.Tests.Mvc
 			).ToHtmlString();
 
 			Assert.Equal(
-				"HTML" + System.Environment.NewLine + "<script>JS</script>",
+				"HTML" + System.Environment.NewLine + "<script>waiting for page load JS</script>",
 				result.ToString()
 			);
 
@@ -116,7 +136,7 @@ namespace React.Tests.Mvc
 			).ToHtmlString();
 
 			Assert.Equal(
-				"HTML" + System.Environment.NewLine + "<script nonce=\"" + nonce + "\">JS</script>",
+				"HTML" + System.Environment.NewLine + "<script nonce=\"" + nonce + "\">waiting for page load JS</script>",
 				result.ToString()
 			);
 		}
@@ -206,6 +226,88 @@ namespace React.Tests.Mvc
 
 			component.Verify(x => x.RenderHtml(It.IsAny<TextWriter>(), It.Is<bool>(y => y == false), It.Is<bool>(z => z == true), null, null), Times.Once);
 		}
+
+		[Fact]
+		public void RenderFunctionsCalledNonLazily()
+		{
+			var component = new Mock<IReactComponent>();
+			var fakeRenderFunctions = new Mock<IRenderFunctions>();
+			fakeRenderFunctions.Setup(x => x.PreRender(It.IsAny<Func<string, string>>())).Verifiable();
+			fakeRenderFunctions.Setup(x => x.PostRender(It.IsAny<Func<string, string>>())).Verifiable();
+			fakeRenderFunctions.Setup(x => x.TransformRenderedHtml(It.IsAny<string>())).Returns("HTML");
+
+			component.Setup(x => x.RenderHtml(It.IsAny<TextWriter>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<Action<Exception, string, string>>(), It.IsAny<IRenderFunctions>()))
+				.Callback((TextWriter writer, bool renderContainerOnly, bool renderServerOnly, Action<Exception, string, string> exceptionHandler, IRenderFunctions renderFunctions) =>
+				{
+					renderFunctions.PreRender(_ => "one");
+					writer.Write(renderFunctions.TransformRenderedHtml("HTML"));
+					renderFunctions.PostRender(_ => "two");
+				}).Verifiable();
+
+			var environment = ConfigureMockEnvironment();
+			environment.Setup(x => x.CreateComponent(
+				"ComponentName",
+				new { },
+				null,
+				false,
+				true
+			)).Returns(component.Object);
+
+			var result = HtmlHelperExtensions.React(
+				htmlHelper: null,
+				componentName: "ComponentName",
+				props: new { },
+				htmlTag: "span",
+				clientOnly: false,
+				serverOnly: true,
+				renderFunctions: fakeRenderFunctions.Object
+			);
+
+			// JS calls must happen right away so thrown exceptions do not crash the app.
+			component.Verify(x => x.RenderHtml(It.IsAny<TextWriter>(), It.Is<bool>(y => y == false), It.Is<bool>(z => z == true), It.IsAny<Action<Exception, string, string>>(), It.IsAny<IRenderFunctions>()), Times.Once);
+			fakeRenderFunctions.Verify(x => x.PreRender(It.IsAny<Func<string, string>>()), Times.Once);
+			fakeRenderFunctions.Verify(x => x.PostRender(It.IsAny<Func<string, string>>()), Times.Once);
+
+			Assert.Equal("HTML", result.ToHtmlString());
+		}
+
+		[Theory]
+		[InlineData(false)]
+		[InlineData(true)]
+		public void ReactGetScriptPaths(bool withNonce)
+		{
+			var config = new Mock<IReactSiteConfiguration>();
+			var environment = ConfigureMockEnvironment(config.Object);
+
+			if (withNonce)
+			{
+				config.Setup(x => x.ScriptNonceProvider).Returns(() => "test1234");
+			}
+
+			environment.Setup(x => x.GetScriptPaths()).Returns(new[] { "/dist/vendor.js", "/dist/app.js" });
+
+			var result = HtmlHelperExtensions.ReactGetScriptPaths(null);
+
+			if (withNonce)
+			{
+				Assert.Equal("<script nonce=\"test1234\" src=\"/dist/vendor.js\"></script><script nonce=\"test1234\" src=\"/dist/app.js\"></script>", result.ToHtmlString());
+			}
+			else
+			{
+				Assert.Equal("<script src=\"/dist/vendor.js\"></script><script src=\"/dist/app.js\"></script>", result.ToHtmlString());
+			}
+		}
+
+		[Fact]
+		public void ReactGetStylePaths()
+		{
+			var environment = ConfigureMockEnvironment();
+
+			environment.Setup(x => x.GetStylePaths()).Returns(new[] { "/dist/vendor.css", "/dist/app.css" });
+
+			var result = HtmlHelperExtensions.ReactGetStylePaths(null);
+
+			Assert.Equal("<link rel=\"stylesheet\" href=\"/dist/vendor.css\" /><link rel=\"stylesheet\" href=\"/dist/app.css\" />", result.ToHtmlString());
+		}
 	}
 }
-#endif

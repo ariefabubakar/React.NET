@@ -3,18 +3,23 @@ layout: docs
 title: CSS-in-JS
 ---
 
-Just want to see the code? Check out the [sample project](https://github.com/reactjs/React.NET/tree/master/src/React.Sample.Webpack.CoreMvc).
+Just want to see the code? Check out the [sample project](https://github.com/reactjs/React.NET/tree/master/src/React.Template/reactnet-webpack).
 
 CSS-in-JS is a technique for declaring styles within components. ReactJS.NET supports server-rendered stylesheets for several libraries (pull requests welcome to add support for more!). Your project must be using a Javascript bundler such as webpack already.
 
 Make sure ReactJS.NET is up to date. You will need at least ReactJS.NET 4.0 (which is in public beta at the time of writing).
 
+If you're using more than one CSS-in-JS library in your project, we've got you covered! Just pass mutliple server-render helper functions into `ChainedRenderFunctions`, and they will be called in the order they are passed in.
+
 ### [Styled Components](https://github.com/styled-components/styled-components)
 
-Expose styled-components as `global.Styled`:
+#### ⚠️  This may break when styled-components publishes a major update, please look at the [webpack sample](https://github.com/reactjs/React.NET/blob/master/src/React.Template/reactnet-webpack/package.json) for the currently known compatible version.
+
+Expose styled-components in your server bundle:
 
 ```js
-require('expose-loader?Styled!styled-components');
+import { ServerStyleSheet } from 'styled-components';
+global.Styled = { ServerStyleSheet };
 ```
 
 Add the render helper to the call to `Html.React`:
@@ -27,7 +32,7 @@ Add the render helper to the call to `Html.React`:
 	var styledComponentsFunctions = new StyledComponentsFunctions();
 }
 
-@Html.React("RootComponent", new { exampleProp = "a" }, renderFunctions: styledComponentsFunctions)
+@Html.React("RootComponent", new { exampleProp = "a" }, renderFunctions: new ChainedRenderFunctions(styledComponentsFunctions))
 
 @{
 	ViewBag.ServerStyles = styledComponentsFunctions.RenderedStyles;
@@ -88,10 +93,13 @@ export function StyledComponentsDemo() {
 
 ### [React-JSS](https://github.com/cssinjs/react-jss)
 
-Expose react-jss as `global.ReactJss`:
+#### ⚠️  This may break when react-jss publishes a major update, please look at the [webpack sample](https://github.com/reactjs/React.NET/blob/master/src/React.Template/reactnet-webpack/package.json) for the currently known compatible version.
+
+Expose react-jss in your server bundle:
 
 ```js
-require('expose-loader?ReactJss!react-jss');
+import { JssProvider, SheetsRegistry } from 'react-jss';
+global.ReactJss = { JssProvider, SheetsRegistry };
 ```
 
 Add the render helper to the call to `Html.React`:
@@ -104,7 +112,7 @@ Add the render helper to the call to `Html.React`:
 	var reactJssFunctions = new ReactJssFunctions();
 }
 
-@Html.React("RootComponent", new { exampleProp = "a" }, renderFunctions: reactJssFunctions)
+@Html.React("RootComponent", new { exampleProp = "a" }, renderFunctions: new ChainedRenderFunctions(reactJssFunctions))
 
 @{
 	ViewBag.ServerStyles = reactJssFunctions.RenderedStyles;
@@ -175,12 +183,15 @@ export class ReactJssDemo extends React.Component {
 
 ### Emotion
 
+#### ⚠️  This may break when emotion publishes a major update, please look at the [webpack sample](https://github.com/reactjs/React.NET/blob/master/src/React.Template/reactnet-webpack/package.json) for the currently known compatible version.
+
 Emotion's integration with ReactJS.NET only supports rendering inline styles (instead of rendering them in the document head).
 
-Expose emotion as `global.EmotionServer`:
+Expose emotion in your server bundle:
 
 ```js
-require('expose-loader?EmotionServer!emotion-server');
+import { renderStylesToString } from 'emotion-server';
+global.EmotionServer = { renderStylesToString };
 ```
 
 Add the render helper to the call to `Html.React`:
@@ -189,7 +200,7 @@ Add the render helper to the call to `Html.React`:
 @using React.AspNet
 @using React.RenderFunctions
 
-@Html.React("RootComponent", new { exampleProp = "a" }, renderFunctions: new EmotionFunctions())
+@Html.React("RootComponent", new { exampleProp = "a" }, renderFunctions: new ChainedRenderFunctions(new EmotionFunctions()))
 ```
 
 You're now ready to declare styles inside components:

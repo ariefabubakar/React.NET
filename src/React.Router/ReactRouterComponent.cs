@@ -7,6 +7,7 @@
 
 using System.IO;
 using Newtonsoft.Json;
+using React.RenderFunctions;
 
 namespace React.Router
 {
@@ -54,12 +55,12 @@ namespace React.Router
 			IRenderFunctions renderFunctions = null
 		)
 		{
-			var reactRouterFunctions = new ReactRouterFunctions(renderFunctions: renderFunctions);
+			var reactRouterFunctions = new ReactRouterFunctions();
 
 			var html = RenderHtml(
 				renderContainerOnly,
 				renderServerOnly,
-				renderFunctions: reactRouterFunctions
+				renderFunctions: new ChainedRenderFunctions(renderFunctions, reactRouterFunctions)
 			);
 
 			return new ExecutionResult
@@ -79,9 +80,11 @@ namespace React.Router
 			writer.Write(ComponentName);
 			writer.Write(", Object.assign(");
 			writer.Write(_serializedProps);
-			writer.Write(", { location: '");
-			writer.Write(_path);
-			writer.Write("', context: context }))");
+			writer.Write(", { location: ");
+			writer.Write(JsonConvert.SerializeObject(
+					_path,
+					_configuration.JsonSerializerSettings));
+			writer.Write(", context: context }))");
 		}
 
 		/// <summary>
@@ -92,13 +95,23 @@ namespace React.Router
 		/// Client side React Router does not need context nor explicit path parameter.
 		/// </summary>
 		/// <returns>JavaScript</returns>
-		public override void RenderJavaScript(TextWriter writer)
+		public override void RenderJavaScript(TextWriter writer, bool waitForDOMContentLoad)
 		{
+			if (waitForDOMContentLoad)
+			{
+				writer.Write("window.addEventListener('DOMContentLoaded', function() {");
+			}
+
 			writer.Write("ReactDOM.hydrate(");
 			base.WriteComponentInitialiser(writer);
 			writer.Write(", document.getElementById(\"");
 			writer.Write(ContainerId);
 			writer.Write("\"))");
+
+			if (waitForDOMContentLoad)
+			{
+				writer.Write("});");
+			}
 		}
 	}
 }

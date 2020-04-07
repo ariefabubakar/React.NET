@@ -8,62 +8,14 @@ namespace React
 	/// </summary>
 	public abstract class RenderFunctionsBase : IRenderFunctions
 	{
-		private readonly IRenderFunctions _renderFunctions;
-
-		/// <summary>
-		/// Constructor. Supports chained calls to multiple render functions by passing in a set of functions that should be called next.
-		/// The functions within the provided RenderFunctions will be called *after* this instance's.
-		/// Supports null as an argument.
-		/// </summary>
-		/// <param name="renderFunctions">The chained render functions to call</param>
-		protected RenderFunctionsBase(IRenderFunctions renderFunctions)
-		{
-			_renderFunctions = renderFunctions;
-		}
-
-		/// <summary>
-		/// Implementation of PreRender
-		/// </summary>
-		/// <param name="executeJs"></param>
-		protected virtual void PreRenderCore(Func<string, string> executeJs)
-		{
-		}
-
-		/// <summary>
-		/// Implementation of WrapComponent
-		/// </summary>
-		/// <param name="componentToRender"></param>
-		/// <returns></returns>
-		protected virtual string WrapComponentCore(string componentToRender)
-		{
-			return componentToRender;
-		}
-
-		/// <summary>
-		/// Implementation of TransformRenderedHtml
-		/// </summary>
-		/// <param name="input"></param>
-		/// <returns></returns>
-		protected virtual string TransformRenderedHtmlCore(string input) => input;
-
-		/// <summary>
-		/// Implementation of PostRender
-		/// </summary>
-		/// <param name="executeJs"></param>
-		protected virtual void PostRenderCore(Func<string, string> executeJs)
-		{
-		}
-
 		/// <summary>
 		/// Executes before component render.
 		/// It takes a func that accepts a Javascript code expression to evaluate, which returns the result of the expression.
 		/// This is useful for setting up variables that will be referenced after the render completes.
 		/// <param name="executeJs">The func to execute</param>
 		/// </summary>
-		public void PreRender(Func<string, string> executeJs)
+		public virtual void PreRender(Func<string, string> executeJs)
 		{
-			PreRenderCore(executeJs);
-			_renderFunctions?.PreRender(executeJs);
 		}
 
 
@@ -75,12 +27,7 @@ namespace React
 		/// </summary>
 		/// <param name="componentToRender">The Javascript expression to wrap</param>
 		/// <returns>A wrapped expression</returns>
-		public string WrapComponent(string componentToRender)
-		{
-			return _renderFunctions == null
-				? WrapComponentCore(componentToRender)
-				: _renderFunctions.WrapComponent(WrapComponentCore(componentToRender));
-		}
+		public virtual string WrapComponent(string componentToRender) => componentToRender;
 
 
 		/// <summary>
@@ -89,12 +36,7 @@ namespace React
 		/// </summary>
 		/// <param name="input">The component HTML</param>
 		/// <returns>A wrapped expression</returns>
-		public string TransformRenderedHtml(string input)
-		{
-			return _renderFunctions == null
-				? TransformRenderedHtmlCore(input)
-				: _renderFunctions.TransformRenderedHtml(TransformRenderedHtmlCore(input));
-		}
+		public virtual string TransformRenderedHtml(string input) => input;
 
 
 		/// <summary>
@@ -103,10 +45,8 @@ namespace React
 		/// This is useful for reading computed state, such as generated stylesheets or a router redirect result.
 		/// </summary>
 		/// <param name="executeJs">The func to execute</param>
-		public void PostRender(Func<string, string> executeJs)
+		public virtual void PostRender(Func<string, string> executeJs)
 		{
-			PostRenderCore(executeJs);
-			_renderFunctions?.PostRender(executeJs);
 		}
 	}
 }

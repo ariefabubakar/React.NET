@@ -45,6 +45,36 @@ We need to install ReactJS.NET to the newly-created project. This is accomplishe
 
 <img src="/img/tutorial/nuget.png" alt="Screenshot: Install NuGet Packages" width="650" />
 
+You will also need to install a JS engine to use (either V8 or ChakraCore are recommended). See the [JSEngineSwitcher docs](https://github.com/Taritsyn/JavaScriptEngineSwitcher/wiki/Registration-of-JS-engines) for more information.
+
+To use V8, add the following packages:
+
+```
+JavaScriptEngineSwitcher.V8
+JavaScriptEngineSwitcher.V8.Native.win-x64
+```
+
+`ReactConfig.cs` will be automatically generated for you. Update it to register a JS engine:
+
+```csharp
+using JavaScriptEngineSwitcher.Core;
+using JavaScriptEngineSwitcher.V8;
+
+[assembly: WebActivatorEx.PreApplicationStartMethod(typeof(React.Sample.Mvc4.ReactConfig), "Configure")]
+
+namespace React.Sample.Mvc4
+{
+	public static class ReactConfig
+	{
+		public static void Configure()
+		{
+			JsEngineSwitcher.Current.DefaultEngineName = V8JsEngine.EngineName;
+			JsEngineSwitcher.Current.EngineFactories.AddV8();
+		}
+	}
+}
+```
+
 ### Create basic controller and view
 
 Since this tutorial focuses mainly on ReactJS.NET itself, we will not cover creation of an MVC controller in much detail. To learn more about ASP.NET MVC, refer to [its official website](https://www.asp.net/mvc).
@@ -71,8 +101,8 @@ Replace the contents of the new view file with the following:
 </head>
 <body>
   <div id="content"></div>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/16.4.0/umd/react.development.js"></script>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/16.4.0/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/16.13.0/umd/react.development.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/16.13.0/umd/react-dom.development.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/remarkable/1.7.1/remarkable.min.js"></script>
   <script src="@Url.Content("~/Scripts/Tutorial.jsx")"></script>
 </body>
@@ -149,7 +179,7 @@ You do not have to return basic HTML. You can return a tree of components that y
 
 `ReactDOM.render()` instantiates the root component, starts the framework, and injects the markup into a raw DOM element, provided as the second argument.
 
-The `ReactDOM` module exposes DOM-specific methods, while `React` has the core tools shared by React on different platforms (e.g., [React Native](https://facebook.github.io/react-native/)).
+The `ReactDOM` module exposes DOM-specific methods, while `React` has the core tools shared by React on different platforms (e.g., [React Native](https://reactnative.dev/)).
 
 ## Composing components
 
@@ -961,8 +991,8 @@ Now that the bundle has been registered, we need to reference it from the view:
 </head>
 <body>
   <div id="content"></div>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/16.4.0/umd/react.development.js"></script>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/16.4.0/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/16.13.0/umd/react.development.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/16.13.0/umd/react-dom.development.js"></script>
   @Scripts.Render("~/bundles/main")
   @Html.ReactInitJavaScript()
 </body>
@@ -1036,9 +1066,18 @@ class CommentBox extends React.Component {
 We also need to update the `Comment` component to use `Remarkable` from either `global` or `window`, due to a bug in Remarkable:
 
 ```javascript{3}
+function createRemarkable() {
+	var remarkable =
+		'undefined' != typeof global && global.Remarkable
+			? global.Remarkable
+			: window.Remarkable;
+
+	return new remarkable();
+}
+
 class Comment extends React.Component {
 	rawMarkup() {
-		const md = new (global.Remarkable || window.Remarkable)();
+		const md = createRemarkable();
 		const rawMarkup = md.render(this.props.children.toString());
 		return { __html: rawMarkup };
 	}
@@ -1072,8 +1111,8 @@ In the view, we will accept the list of comments as the model, and use `Html.Rea
     submitUrl = Url.Action("AddComment"),
     pollInterval = 2000
   })
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/16.4.0/umd/react.development.js"></script>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/16.4.0/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/16.13.0/umd/react.development.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/16.13.0/umd/react-dom.development.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/remarkable/1.7.1/remarkable.min.js"></script>
   <script src="@Url.Content("~/Scripts/Tutorial.jsx")"></script>
   @Html.ReactInitJavaScript()

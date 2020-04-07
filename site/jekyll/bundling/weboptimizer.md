@@ -5,7 +5,7 @@ title: Bundling and Minification (ASP.NET 4.x)
 
 > **Note:**
 >
-> This guide applies only to ASP.NET 4.x
+> This guide applies only to ASP.NET 4.x. Please consider using [webpack](/bundling/webpack.html) if possible.
 
 Just want to see the code? Check out the [sample project](https://github.com/reactjs/React.NET/tree/master/src/React.Sample.Mvc4).
 
@@ -41,4 +41,13 @@ bundles.Add(new Bundle("~/bundles/main", new IBundleTransform[]
 }).Include(
 	"~/Content/HelloWorld.react.jsx"
 ));
+```
+
+Note that debug mode should be set to `false` in your `Web.config` file for this to work.
+
+```csharp
+// Web.config
+  <system.web>
+    <compilation debug="false" targetFramework="4.x" />
+  </system.web>
 ```

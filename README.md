@@ -1,6 +1,6 @@
 # [ReactJS.NET](http://reactjs.net/)
 
-ReactJS.NET is a library that makes it easier to use [Babel](http://babeljs.io/) along with Facebook's [React](http://facebook.github.io/react/) and [JSX](http://facebook.github.io/react/docs/jsx-in-depth.html) from C#.
+ReactJS.NET is a library that makes it easier to use [Babel](http://babeljs.io/) along with Facebook's [React](https://reactjs.org/) and [JSX](https://reactjs.org/docs/jsx-in-depth.html) from C#.
 
 [![Build status](https://img.shields.io/appveyor/ci/Daniel15/react-net/master.svg)](https://ci.appveyor.com/project/Daniel15/react-net/branch/master)&nbsp;
 [![NuGet version](http://img.shields.io/nuget/v/React.Core.svg)](https://www.nuget.org/packages/React.Core/)
@@ -8,50 +8,37 @@ ReactJS.NET is a library that makes it easier to use [Babel](http://babeljs.io/)
 
 # Features
 
--   On-the-fly [JSX to JavaScript compilation](http://reactjs.net/getting-started/usage.html) via [Babel](http://babeljs.io/)
+- On-the-fly [JSX to JavaScript compilation](http://reactjs.net/getting-started/usage.html) via [Babel](http://babeljs.io/)
 
-*   JSX to JavaScript compilation via popular minification/combination
-    libraries:
-    -   [ASP.NET Bundling and Minification](http://reactjs.net/guides/weboptimizer.html)
-    -   [Cassette](http://reactjs.net/guides/cassette.html)
-    -   [Webpack](http://reactjs.net/guides/webpack.html)
-    -   [MSBuild](http://reactjs.net/guides/msbuild.html)
-*   [Server-side component rendering](http://reactjs.net/guides/server-side-rendering.html)
-    to make your initial render super-fast (experimental!)
-*   [Runs on Windows, OS X and Linux](http://reactjs.net/guides/chakracore.html) via .NET Core and ChakraCore
-*   Supports both ASP.NET 4.0/4.5 and ASP.NET Core
-*   Server-side style rendering with CSS-in-JS libraries
+* JSX to JavaScript compilation via popular minification/combination
+  libraries:
+  - [ASP.NET Bundling and Minification](http://reactjs.net/bundling/weboptimizer.html)
+  - [Cassette](http://reactjs.net/bundling/cassette.html)
+  - [Webpack](http://reactjs.net/bundling/webpack.html)
+  - [MSBuild](http://reactjs.net/bundling/msbuild.html)
+* [Server-side component rendering](http://reactjs.net/features/server-side-rendering.html)
+  to make your initial render super-fast, including support for:
+  - [CSS-in-JS libraries](https://reactjs.net/features/css-in-js.html)
+  - [React Router](https://reactjs.net/features/react-router.html)
+  - [React Helmet](https://reactjs.net/features/react-helmet.html)
+  - Custom JS logic via implementing [IRenderFunctions](https://github.com/reactjs/React.NET/blob/c93921f059bfe9419ad7094c184979da422a4477/src/React.Core/IRenderFunctions.cs) and passing to [Html.React](https://github.com/reactjs/React.NET/blob/c93921f059bfe9419ad7094c184979da422a4477/src/React.AspNet/HtmlHelperExtensions.cs#L71)
+* [Runs on Windows, OS X and Linux](http://reactjs.net/getting-started/chakracore.html) via .NET Core and ChakraCore
+* Supports both ASP.NET 4.0/4.5 and ASP.NET Core
 
 # Quick Start
 
-Install the package
-
 ```
-Install-Package React.Web.Mvc4 # For ASP.NET MVC 4 or 5
-Install-Package React.AspNet   # For ASP.NET Core MVC
-```
-
-Create JSX files
-
-```javascript
-// /Scripts/HelloWorld.jsx
-class HelloWorld extends React.Component {
-	render() {
-		return <div>Hello {this.props.name}</div>;
-	}
-}
+dotnet new -i React.Template
+dotnet new reactnet-vanilla
+dotnet run
 ```
 
-Reference the JSX files from your HTML
+#### Planning on using `require` or `import` module syntax in your application? Use the `reactnet-webpack` template instead for webpack support.
 
-```html
-<script src="@Url.Content("~/Scripts/HelloWorld.jsx")"></script>
-```
+See also:
 
-Now you can use the `HelloWorld` component.
-
-For information on more advanced topics (including precompilation and
-server-side rendering), check out [the documentation](http://reactjs.net/docs)
+- [Getting Started](https://reactjs.net/getting-started/aspnetcore.html)
+- [Tutorial](https://reactjs.net/tutorials/aspnetcore.html)
 
 ## Building Manually and Contributing
 
